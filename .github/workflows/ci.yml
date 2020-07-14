@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    tags: v*
+
+jobs:
+  generate_macos_sdk:
+    name: Generate macOS SDK
+    runs-on: macOS-latest
+
+    steps:
+      - name: Extract Version
+        id: version
+        run: echo ::set-output name=version::${GITHUB_REF#refs/tags/v}
+
+      - name: Extract SDK Version
+        id: sdk_version
+        run: echo ::set-output name=sdk_version::$(xcrun --sdk macosx --show-sdk-version)
+
+      - name: Download Apple SDK Generator
+        env:
+          apple_sdk_generator_version: 0.0.1
+        run: |
+          curl -L -o asg.tar.xz https://github.com/d-cross-compiler/apple-sdk-generator/releases/download/v${{ env.apple_sdk_generator_version }}/apple-sdk-generator-${{ env.apple_sdk_generator_version }}-macos.tar.xz
+          tar xf asg.tar.xz
+
+      - name: Generator SDK
+        env:
+          sdk_output: macosx-${{ steps.version.outputs.version }}-${{ steps.sdk_version.outputs.sdk_version }}
+        run: |
+          ./apple-sdk-generator --sdk-path $(xcrun --sdk macosx --show-sdk-path) --output ${{ env.sdk_output }}
+          tar Jcf ${{ env.sdk_output }}.tar.xz ${{ env.sdk_output }}
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Apple SDK ${{ steps.version.outputs.version }}
+          draft: true
+          files: macosx*.tar.xz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
